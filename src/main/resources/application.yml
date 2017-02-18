@@ -1,0 +1,15 @@
+server:
+  port: 80
+
+spring:
+  redis:
+    host: localhost
+    port: 6379
+
+logging:
+  level:
+    org.atmosphere: TRACE
+    com.vaadin: DEBUG
+    org.springframework.session.data.redis: DEBUG
+    com.example: DEBUG
+    org.vaadin.spring.session.redis: DEBUG
