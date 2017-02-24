@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 Vaadin Ltd.
+ * Copyright 2000-2016 Vaadin Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -18,15 +18,12 @@ package com.vaadin.server.communication;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
-import java.io.OutputStream;
 import java.io.Reader;
 import java.io.Serializable;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.io.Writer;
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
+import java.util.Collection;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -35,14 +32,20 @@ import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
 
+import org.atmosphere.cpr.AtmosphereFramework;
 import org.atmosphere.cpr.AtmosphereResource;
 import org.atmosphere.cpr.AtmosphereResource.TRANSPORT;
-import org.atmosphere.cpr.Serializer;
-import org.atmosphere.gwt20.jackson.JacksonSerializerProvider;
-import org.atmosphere.gwt20.server.SerializationException;
-import org.atmosphere.gwt20.server.ServerSerializer;
+import org.atmosphere.cpr.Broadcaster;
 import org.atmosphere.util.Version;
+import org.springframework.data.redis.core.RedisOperations;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.web.context.support.WebApplicationContextUtils;
 
+import com.example.VaadinUI;
+import com.vaadin.server.ClientConnector;
+import com.vaadin.server.VaadinServletService;
+import com.vaadin.server.VaadinSession;
 import com.vaadin.shared.communication.PushConstants;
 import com.vaadin.ui.UI;
 
@@ -116,7 +119,7 @@ public class AtmospherePushConnection implements PushConnection {
         }
     }
 
-    protected enum State {
+    public enum State {
         /**
          * Not connected. Trying to push will set the connection state to
          * PUSH_PENDING or RESPONSE_PENDING and defer sending the message until
@@ -142,7 +145,7 @@ public class AtmospherePushConnection implements PushConnection {
         CONNECTED;
     }
 
-    private UI ui;
+    private final UI ui;
     private State state = State.DISCONNECTED;
     private transient AtmosphereResource resource;
     private transient FragmentedMessage incomingMessage;
@@ -159,7 +162,7 @@ public class AtmospherePushConnection implements PushConnection {
 
     /**
      * Pushes pending state changes and client RPC calls to the client. If
-     * {@code isConnected()} is false, defers the push until a connection is
+     * {@code isConnected()} is false, defers the push until a connection is
      * established.
      *
      * @param async
@@ -167,6 +170,31 @@ public class AtmospherePushConnection implements PushConnection {
      *            false if it is a response to a client request.
      */
     public void push(boolean async) {
+        if (resource == null) {
+            log.debug("Try to push with empty resource {}, {}", resource, state);
+
+            AtmosphereResource oldResource = null;
+            if (getUI().getSession() != null) {
+                VaadinServletService service = (VaadinServletService)getUI().getSession().getService();
+                RedisTemplate<String, AtmosphereResource> redisTemplate = (RedisTemplate)WebApplicationContextUtils.getWebApplicationContext(service.getServlet().getServletContext()).getBean("redisTemplate");
+                ValueOperations<String, AtmosphereResource> valueOper = redisTemplate.opsForValue();
+                oldResource = valueOper.get(getUI().getSession().getSession().getId());
+            }
+
+            if (oldResource != null && getUI().getSession() != null) {
+                log.debug("Try to add resource");
+                resource = oldResource;
+                state = State.CONNECTED;
+            }
+        }
+        else {
+            log.debug("Try to push with resource {}, {}", resource, state);
+            VaadinServletService service = (VaadinServletService)getUI().getSession().getService();
+            RedisTemplate<String, AtmosphereResource> redisTemplate = (RedisTemplate)WebApplicationContextUtils.getWebApplicationContext(service.getServlet().getServletContext()).getBean("redisTemplate");
+            ValueOperations<String, AtmosphereResource> valueOper = redisTemplate.opsForValue();
+            valueOper.set(getUI().getSession().getSession().getId(), resource);
+        }
+
         if (!isConnected()) {
             if (async && state != State.RESPONSE_PENDING) {
                 state = State.PUSH_PENDING;
@@ -194,6 +222,7 @@ public class AtmospherePushConnection implements PushConnection {
     void sendMessage(String message) {
         assert (isConnected());
         // "Broadcast" the changes to the single client only
+        log.debug("Sending message {}", message);
         outgoingMessage = getResource().getBroadcaster().broadcast(message,
                 getResource());
     }
@@ -221,6 +250,7 @@ public class AtmospherePushConnection implements PushConnection {
             incomingMessage = new FragmentedMessage(reader);
         }
 
+        log.debug("Incomming message {}", incomingMessage);
         if (incomingMessage.append(reader)) {
             // Message is complete
             Reader completeReader = incomingMessage.getReader();
@@ -240,8 +270,8 @@ public class AtmospherePushConnection implements PushConnection {
     }
 
     /**
-     * Associates this {@code AtmospherePushConnection} with the given
-     * {@AtmosphereResource} representing an established push connection. If
+     * Associates this {@link AtmospherePushConnection} with the given
+     * {@link AtmosphereResource} representing an established push connection. If
      * already connected, calls {@link #disconnect()} first. If there is a
      * deferred push, carries it out via the new connection.
      *
@@ -269,22 +299,26 @@ public class AtmospherePushConnection implements PushConnection {
     }
 
     /**
-     * Gets the UI this push connection is associated with.
-     *
-     * @return the UI associated with this connection
+     * @return the UI associated with this connection.
      */
-    public UI getUI() {
+    protected UI getUI() {
         return ui;
     }
 
     /**
-     * Gets the atmosphere resource associated with this connection.
-     *
-     * @return The AtmosphereResource associated with this connection or
-     *         <code>null</code> if the connection is not open.
+     * @return The AtmosphereResource associated with this connection or null if
+     *         connection not open.
      */
-    public AtmosphereResource getResource() {
+    protected AtmosphereResource getResource() {
         return resource;
+    }
+
+    public void setResource(AtmosphereResource resource) {
+        this.resource = resource;
+    }
+
+    public void setState(State state) {
+        this.state = state;
     }
 
     @Override
@@ -323,6 +357,7 @@ public class AtmospherePushConnection implements PushConnection {
 
         try {
             resource.close();
+            VaadinSession.getCurrent().getSession().removeAttribute("TestAttribute");
         } catch (IOException e) {
             getLogger().log(Level.INFO, "Error when closing push connection",
                     e);
@@ -353,19 +388,6 @@ public class AtmospherePushConnection implements PushConnection {
         return state;
     }
 
-    private void writeObject(ObjectOutputStream stream) throws IOException, SerializationException {
-        stream.defaultWriteObject();
-        if (resource != null) {
-            log.debug("Found resource");
-            ServerSerializer serializer = new JacksonSerializerProvider()
-                    .getServerSerializer();
-            String payload = serializer.serialize(resource);
-            stream.write(payload.getBytes(StandardCharsets.UTF_8));
-        }
-
-
-    }
-
     /**
      * Reinitializes this PushConnection after deserialization. The connection
      * is initially in disconnected state; the client will handle the
@@ -374,7 +396,6 @@ public class AtmospherePushConnection implements PushConnection {
     private void readObject(ObjectInputStream stream)
             throws IOException, ClassNotFoundException {
         stream.defaultReadObject();
-        state = State.DISCONNECTED;
     }
 
     private static Logger getLogger() {

@@ -25,30 +25,27 @@ public class VaadinUI extends UI {
         layout.addComponent(new Button("Test", e -> e.getButton().setCaption("Ok")));
         setContent(layout);
 
-        buildPushSomething();
+        // Start the data feed thread
+        new FeederThread().start();
+
     }
 
 
-    private void buildPushSomething() {
-        class FeederThread extends Thread {
-            @Override
-            public void run() {
-                try {
-
-                    getUI().access(() -> {
-                        layout.addComponent(new Label("Hallo"));
-                    });
-                    Thread.sleep(10000);
-                    getUI().access(() -> {
-                        layout.addComponent(new Label("Du"));
-                    });
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
+    class FeederThread extends Thread {
+        @Override
+        public void run() {
+            try {
+                access(() -> {
+                    layout.addComponent(new Label("Hallo"));
+                });
+                Thread.sleep(10000);
+                access(() -> {
+                    layout.addComponent(new Label("Du"));
+                });
+            } catch (InterruptedException e) {
+                e.printStackTrace();
             }
         }
-
-        new FeederThread().start();
     }
 
 }

@@ -25,32 +25,36 @@ sourceCompatibility = 1.8
 
 repositories {
     maven { url "http://maven.vaadin.com/vaadin-addons" }
+    maven { url "http://maven.vaadin.com/vaadin-prereleases" }
     maven { url "http://www.jdal.org/repo" }
 }
 
 ext {
     lombokVersion = '1.16.12'
-    jdalVaadinVersion = "2.1.RC1";
+    jdalVaadinVersion = "2.1.RC1"
+    vaadinVersion = "8.0.0.rc2"
 }
 
 dependencies {
-    compile("com.vaadin:vaadin-spring-boot-starter:1.2.0")
+    compile("com.vaadin:vaadin-spring-boot-starter:2.0.0.rc1")
 
     compile("org.springframework.boot:spring-boot-starter-data-redis")
     compile("org.springframework.session:spring-session")
     compile("org.vaadin:spring-session-redis:1.0")
 
-    compile("com.vaadin:vaadin-push")
+    compile("com.vaadin:vaadin-client-compiled:${vaadinVersion}")
+    compile("com.vaadin:vaadin-server:${vaadinVersion}")
+    compile("com.vaadin:vaadin-push:${vaadinVersion}")
 
-    compile group: 'org.atmosphere.extensions', name: 'atmosphere-gwt20-jackson', version: '2.2.2-GWT27'
+    compile("org.atmosphere:atmosphere-spring:2.4.3")
+    {
+        exclude group: 'org.atmosphere'
+        exclude module: 'atmosphere-runtime'
+    }
 
     compile "org.projectlombok:lombok:${lombokVersion}"
 
     testCompile('org.springframework.boot:spring-boot-starter-test')
 }
 
-dependencyManagement {
-  imports {
-    mavenBom "com.vaadin:vaadin-bom:7.7.7"
-  }
-}
+

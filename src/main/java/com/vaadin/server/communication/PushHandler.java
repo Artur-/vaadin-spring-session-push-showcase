@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 Vaadin Ltd.
+ * Copyright 2000-2016 Vaadin Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -18,16 +18,18 @@ package com.vaadin.server.communication;
 
 import java.io.IOException;
 import java.io.Reader;
-import java.io.Serializable;
 import java.util.Collection;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import org.atmosphere.cpr.AtmosphereFramework;
 import org.atmosphere.cpr.AtmosphereRequest;
 import org.atmosphere.cpr.AtmosphereResource;
 import org.atmosphere.cpr.AtmosphereResource.TRANSPORT;
 import org.atmosphere.cpr.AtmosphereResourceEvent;
 import org.atmosphere.cpr.AtmosphereResourceImpl;
+import org.atmosphere.cpr.Broadcaster;
+import org.springframework.web.context.support.WebApplicationContextUtils;
 
 import com.vaadin.server.ErrorEvent;
 import com.vaadin.server.ErrorHandler;
@@ -54,7 +56,7 @@ import elemental.json.JsonException;
  * @author Vaadin Ltd
  * @since 7.1
  */
-public class PushHandler implements Serializable {
+public class PushHandler {
 
     private int longPollingSuspendTimeout = -1;
 
@@ -72,43 +74,41 @@ public class PushHandler implements Serializable {
      * open by calling resource.suspend(). If there is a pending push, send it
      * now.
      */
-    private transient final PushEventCallback establishCallback = new PushEventCallback() {
-        @Override
-        public void run(AtmosphereResource resource, UI ui) throws IOException {
-            getLogger().log(Level.FINER,
-                    "New push connection for resource {0} with transport {1}",
-                    new Object[] { resource.uuid(), resource.transport() });
+    private final PushEventCallback establishCallback = (
+            AtmosphereResource resource, UI ui) -> {
+        getLogger().log(Level.FINER,
+                "New push connection for resource {0} with transport {1}",
+                new Object[] { resource.uuid(), resource.transport() });
 
-            resource.getResponse().setContentType("text/plain; charset=UTF-8");
+        resource.getResponse().setContentType("text/plain; charset=UTF-8");
 
-            VaadinSession session = ui.getSession();
-            if (resource.transport() == TRANSPORT.STREAMING) {
-                // Must ensure that the streaming response contains
-                // "Connection: close", otherwise iOS 6 will wait for the
-                // response to this request before sending another request to
-                // the same server (as it will apparently try to reuse the same
-                // connection)
-                resource.getResponse().addHeader("Connection", "close");
-            }
-
-            String requestToken = resource.getRequest()
-                    .getParameter(ApplicationConstants.CSRF_TOKEN_PARAMETER);
-            if (!VaadinService.isCsrfTokenValid(session, requestToken)) {
-                getLogger().log(Level.WARNING,
-                        "Invalid CSRF token in new connection received from {0}",
-                        resource.getRequest().getRemoteHost());
-                // Refresh on client side, create connection just for
-                // sending a message
-                sendRefreshAndDisconnect(resource);
-                return;
-            }
-
-            suspend(resource);
-
-            AtmospherePushConnection connection = getConnectionForUI(ui);
-            assert (connection != null);
-            connection.connect(resource);
+        VaadinSession session = ui.getSession();
+        if (resource.transport() == TRANSPORT.STREAMING) {
+            // Must ensure that the streaming response contains
+            // "Connection: close", otherwise iOS 6 will wait for the
+            // response to this request before sending another request to
+            // the same server (as it will apparently try to reuse the same
+            // connection)
+            resource.getResponse().addHeader("Connection", "close");
         }
+
+        String requestToken = resource.getRequest()
+                .getParameter(ApplicationConstants.CSRF_TOKEN_PARAMETER);
+        if (!VaadinService.isCsrfTokenValid(session, requestToken)) {
+            getLogger().log(Level.WARNING,
+                    "Invalid CSRF token in new connection received from {0}",
+                    resource.getRequest().getRemoteHost());
+            // Refresh on client side, create connection just for
+            // sending a message
+            sendRefreshAndDisconnect(resource);
+            return;
+        }
+
+        suspend(resource);
+
+        AtmospherePushConnection connection = getConnectionForUI(ui);
+        assert (connection != null);
+        connection.connect(resource);
     };
 
     /**
@@ -118,52 +118,49 @@ public class PushHandler implements Serializable {
      * the request and send changed UI state via the push channel (we do not
      * respond to the request directly.)
      */
-    private transient final PushEventCallback receiveCallback = new PushEventCallback() {
-        @Override
-        public void run(AtmosphereResource resource, UI ui) throws IOException {
-            getLogger().log(Level.FINER, "Received message from resource {0}",
-                    resource.uuid());
+    private final PushEventCallback receiveCallback = (
+            AtmosphereResource resource, UI ui) -> {
+        getLogger().log(Level.FINER, "Received message from resource {0}",
+                resource.uuid());
 
-            AtmosphereRequest req = resource.getRequest();
+        AtmosphereRequest req = resource.getRequest();
 
-            AtmospherePushConnection connection = getConnectionForUI(ui);
+        AtmospherePushConnection connection = getConnectionForUI(ui);
 
-            assert connection != null : "Got push from the client "
-                    + "even though the connection does not seem to be "
-                    + "valid. This might happen if a HttpSession is "
-                    + "serialized and deserialized while the push "
-                    + "connection is kept open or if the UI has a "
-                    + "connection of unexpected type.";
+        assert connection != null : "Got push from the client "
+                + "even though the connection does not seem to be "
+                + "valid. This might happen if a HttpSession is "
+                + "serialized and deserialized while the push "
+                + "connection is kept open or if the UI has a "
+                + "connection of unexpected type.";
 
-            Reader reader = connection.receiveMessage(req.getReader());
-            if (reader == null) {
-                // The whole message was not yet received
-                return;
-            }
+        Reader reader = connection.receiveMessage(req.getReader());
+        if (reader == null) {
+            // The whole message was not yet received
+            return;
+        }
 
-            // Should be set up by caller
-            VaadinRequest vaadinRequest = VaadinService.getCurrentRequest();
-            assert vaadinRequest != null;
+        // Should be set up by caller
+        VaadinRequest vaadinRequest = VaadinService.getCurrentRequest();
+        assert vaadinRequest != null;
 
-            try {
-                new ServerRpcHandler().handleRpc(ui, reader, vaadinRequest);
-                connection.push(false);
-            } catch (JsonException e) {
-                getLogger().log(Level.SEVERE, "Error writing JSON to response",
-                        e);
-                // Refresh on client side
-                sendRefreshAndDisconnect(resource);
-            } catch (InvalidUIDLSecurityKeyException e) {
-                getLogger().log(Level.WARNING,
-                        "Invalid security key received from {0}",
-                        resource.getRequest().getRemoteHost());
-                // Refresh on client side
-                sendRefreshAndDisconnect(resource);
-            }
+        try {
+            new ServerRpcHandler().handleRpc(ui, reader, vaadinRequest);
+            connection.push(false);
+        } catch (JsonException e) {
+            getLogger().log(Level.SEVERE, "Error writing JSON to response", e);
+            // Refresh on client side
+            sendRefreshAndDisconnect(resource);
+        } catch (InvalidUIDLSecurityKeyException e) {
+            getLogger().log(Level.WARNING,
+                    "Invalid security key received from {0}",
+                    resource.getRequest().getRemoteHost());
+            // Refresh on client side
+            sendRefreshAndDisconnect(resource);
         }
     };
 
-    private VaadinServletService service;
+    private final VaadinServletService service;
 
     public PushHandler(VaadinServletService service) {
         this.service = service;
@@ -504,7 +501,7 @@ public class PushHandler implements Serializable {
      * aware of a reconnect taking place.
      *
      * @since 7.6
-     * @param suspendTimeout
+     * @param longPollingSuspendTimeout
      *            the timeout to use for suspended AtmosphereResources
      */
     public void setLongPollingSuspendTimeout(int longPollingSuspendTimeout) {
