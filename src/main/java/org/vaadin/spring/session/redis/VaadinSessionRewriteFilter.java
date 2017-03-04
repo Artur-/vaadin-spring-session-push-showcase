@@ -1,13 +1,16 @@
 package org.vaadin.spring.session.redis;
 
-import javax.servlet.*;
+import java.io.IOException;
+
+import javax.servlet.Filter;
+import javax.servlet.FilterChain;
+import javax.servlet.FilterConfig;
+import javax.servlet.ServletException;
+import javax.servlet.ServletRequest;
+import javax.servlet.ServletResponse;
 import javax.servlet.annotation.WebFilter;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpSession;
-
-import lombok.extern.slf4j.Slf4j;
-
-import java.io.IOException;
 
 /**
  * Spring Session with Redis doesn't work out-of-the-box with Vaadin. The issue is that the objects in the session are sent to Redis
@@ -21,7 +24,6 @@ import java.io.IOException;
  * @author Alejandro Duarte.
  */
 @WebFilter
-@Slf4j
 public class VaadinSessionRewriteFilter implements Filter {
     @Override
     public void init(FilterConfig filterConfig) throws ServletException {
@@ -33,7 +35,7 @@ public class VaadinSessionRewriteFilter implements Filter {
 
         try {
             HttpServletRequest httpServletRequest = (HttpServletRequest) request;
-            if (!httpServletRequest.getRequestURI().contains("/VAADIN")) {
+            if (!httpServletRequest.getRequestURI().contains("/VAADIN") && !httpServletRequest.getRequestURI().startsWith("/vaadinServlet")) {
                 HttpSession session = httpServletRequest.getSession(false);
 
                 if (session != null) {
