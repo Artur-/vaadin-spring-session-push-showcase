@@ -1,14 +1,12 @@
 buildscript {
   ext {
-    springBootVersion = "1.5.1.RELEASE"
-    springDependencyManagementVersion = "0.6.1.RELEASE"
+    springBootVersion = "1.5.2.RELEASE"
   }
   repositories {
     mavenCentral()
   }
   dependencies {
     classpath("org.springframework.boot:spring-boot-gradle-plugin:${springBootVersion}")
-    classpath("io.spring.gradle:dependency-management-plugin:${springDependencyManagementVersion}")
   }
 }
 
@@ -24,7 +22,6 @@ jar {
 sourceCompatibility = 1.8
 
 repositories {
-    mavenCentral()
     maven { url "http://maven.vaadin.com/vaadin-addons" }
     mavenCentral()
 }
@@ -34,11 +31,12 @@ ext {
 }
 
 dependencies {
-    compile("com.vaadin:vaadin-spring-boot-starter:2.0.0")
+    compile("com.vaadin:vaadin-spring-boot-starter:2.0.1")
+
+//    compile("org.springframework.boot:spring-boot-starter-jetty:1.+")
 
     compile("org.springframework.boot:spring-boot-starter-data-redis")
     compile("org.springframework.session:spring-session")
-    compile("org.vaadin:spring-session-redis:1.0")
 
     compile("com.vaadin:vaadin-push")
 
@@ -49,7 +47,7 @@ dependencies {
 
 dependencyManagement {
   imports {
-    mavenBom "com.vaadin:vaadin-bom:8.0.0"
+    mavenBom "com.vaadin:vaadin-bom:8.0.5"
   }
 }
 
