@@ -1,14 +1,12 @@
 buildscript {
   ext {
-    springBootVersion = "1.5.1.RELEASE"
-    springDependencyManagementVersion = "0.6.1.RELEASE"
+    springBootVersion = "1.5.2.RELEASE"
   }
   repositories {
     mavenCentral()
   }
   dependencies {
     classpath("org.springframework.boot:spring-boot-gradle-plugin:${springBootVersion}")
-    classpath("io.spring.gradle:dependency-management-plugin:${springDependencyManagementVersion}")
   }
 }
 
@@ -25,24 +23,22 @@ sourceCompatibility = 1.8
 
 repositories {
     maven { url "http://maven.vaadin.com/vaadin-addons" }
-    maven { url "http://www.jdal.org/repo" }
+    mavenCentral()
 }
 
 ext {
     lombokVersion = '1.16.12'
-    jdalVaadinVersion = "2.1.RC1";
 }
 
 dependencies {
-    compile("com.vaadin:vaadin-spring-boot-starter:1.2.0")
+    compile("com.vaadin:vaadin-spring-boot-starter:2.0.1")
+
+//    compile("org.springframework.boot:spring-boot-starter-jetty:1.+")
 
     compile("org.springframework.boot:spring-boot-starter-data-redis")
     compile("org.springframework.session:spring-session")
-    compile("org.vaadin:spring-session-redis:1.0")
 
     compile("com.vaadin:vaadin-push")
-
-    compile group: 'org.atmosphere.extensions', name: 'atmosphere-gwt20-jackson', version: '2.2.2-GWT27'
 
     compile "org.projectlombok:lombok:${lombokVersion}"
 
@@ -51,6 +47,7 @@ dependencies {
 
 dependencyManagement {
   imports {
-    mavenBom "com.vaadin:vaadin-bom:7.7.7"
+    mavenBom "com.vaadin:vaadin-bom:8.0.5"
   }
 }
+

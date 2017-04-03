@@ -1,9 +1,9 @@
 package com.example;
 
+import com.vaadin.annotations.PreserveOnRefresh;
 import com.vaadin.annotations.Push;
 import com.vaadin.annotations.Theme;
 import com.vaadin.server.VaadinRequest;
-import com.vaadin.shared.ui.ui.Transport;
 import com.vaadin.spring.annotation.SpringUI;
 import com.vaadin.ui.Button;
 import com.vaadin.ui.HorizontalLayout;
@@ -13,7 +13,8 @@ import com.vaadin.ui.themes.ValoTheme;
 
 @SpringUI
 @Theme(ValoTheme.THEME_NAME)
-@Push(transport = Transport.LONG_POLLING)
+@Push
+@PreserveOnRefresh
 public class VaadinUI extends UI {
 
     private static final long serialVersionUID = 8135679809390061654L;
@@ -25,30 +26,28 @@ public class VaadinUI extends UI {
         layout.addComponent(new Button("Test", e -> e.getButton().setCaption("Ok")));
         setContent(layout);
 
-        buildPushSomething();
+        // Start the data feed thread
+        new FeederThread().start();
     }
 
 
-    private void buildPushSomething() {
-        class FeederThread extends Thread {
-            @Override
-            public void run() {
-                try {
+    class FeederThread extends Thread {
+        final UI ui = getUI();
 
-                    getUI().access(() -> {
-                        layout.addComponent(new Label("Hallo"));
-                    });
-                    Thread.sleep(10000);
-                    getUI().access(() -> {
-                        layout.addComponent(new Label("Du"));
-                    });
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
+        @Override
+        public void run() {
+            try {
+                ui.access(() -> {
+                    layout.addComponent(new Label("Hallo"));
+                });
+                Thread.sleep(10000);
+                ui.access(() -> {
+                    layout.addComponent(new Label("Du"));
+                });
+            } catch (InterruptedException e) {
+                e.printStackTrace();
             }
         }
-
-        new FeederThread().start();
     }
 
 }

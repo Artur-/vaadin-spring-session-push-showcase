@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 Vaadin Ltd.
+ * Copyright 2000-2016 Vaadin Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -18,15 +18,11 @@ package com.vaadin.server.communication;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
-import java.io.OutputStream;
 import java.io.Reader;
 import java.io.Serializable;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.io.Writer;
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -37,16 +33,11 @@ import java.util.logging.Logger;
 
 import org.atmosphere.cpr.AtmosphereResource;
 import org.atmosphere.cpr.AtmosphereResource.TRANSPORT;
-import org.atmosphere.cpr.Serializer;
-import org.atmosphere.gwt20.jackson.JacksonSerializerProvider;
-import org.atmosphere.gwt20.server.SerializationException;
-import org.atmosphere.gwt20.server.ServerSerializer;
 import org.atmosphere.util.Version;
 
+import com.example.DemoApplication;
 import com.vaadin.shared.communication.PushConstants;
 import com.vaadin.ui.UI;
-
-import lombok.extern.slf4j.Slf4j;
 
 /**
  * A {@link PushConnection} implementation using the Atmosphere push support
@@ -55,7 +46,6 @@ import lombok.extern.slf4j.Slf4j;
  * @author Vaadin Ltd
  * @since 7.1
  */
-@Slf4j
 public class AtmospherePushConnection implements PushConnection {
 
     public static String getAtmosphereVersion() {
@@ -142,8 +132,8 @@ public class AtmospherePushConnection implements PushConnection {
         CONNECTED;
     }
 
-    private UI ui;
-    private State state = State.DISCONNECTED;
+    private final UI ui;
+    private transient State state = State.DISCONNECTED;
     private transient AtmosphereResource resource;
     private transient FragmentedMessage incomingMessage;
     private transient Future<Object> outgoingMessage;
@@ -159,7 +149,7 @@ public class AtmospherePushConnection implements PushConnection {
 
     /**
      * Pushes pending state changes and client RPC calls to the client. If
-     * {@code isConnected()} is false, defers the push until a connection is
+     * {@code isConnected()} is false, defers the push until a connection is
      * established.
      *
      * @param async
@@ -167,6 +157,11 @@ public class AtmospherePushConnection implements PushConnection {
      *            false if it is a response to a client request.
      */
     public void push(boolean async) {
+        if (resource == null) {
+            state = State.CONNECTED;
+            resource = DemoApplication.storedResource;
+        }
+
         if (!isConnected()) {
             if (async && state != State.RESPONSE_PENDING) {
                 state = State.PUSH_PENDING;
@@ -240,8 +235,8 @@ public class AtmospherePushConnection implements PushConnection {
     }
 
     /**
-     * Associates this {@code AtmospherePushConnection} with the given
-     * {@AtmosphereResource} representing an established push connection. If
+     * Associates this {@link AtmospherePushConnection} with the given
+     * {@link AtmosphereResource} representing an established push connection. If
      * already connected, calls {@link #disconnect()} first. If there is a
      * deferred push, carries it out via the new connection.
      *
@@ -257,6 +252,7 @@ public class AtmospherePushConnection implements PushConnection {
         }
 
         this.resource = resource;
+        DemoApplication.storedResource = resource;
         State oldState = state;
         state = State.CONNECTED;
 
@@ -353,19 +349,6 @@ public class AtmospherePushConnection implements PushConnection {
         return state;
     }
 
-    private void writeObject(ObjectOutputStream stream) throws IOException, SerializationException {
-        stream.defaultWriteObject();
-        if (resource != null) {
-            log.debug("Found resource");
-            ServerSerializer serializer = new JacksonSerializerProvider()
-                    .getServerSerializer();
-            String payload = serializer.serialize(resource);
-            stream.write(payload.getBytes(StandardCharsets.UTF_8));
-        }
-
-
-    }
-
     /**
      * Reinitializes this PushConnection after deserialization. The connection
      * is initially in disconnected state; the client will handle the
@@ -375,6 +358,7 @@ public class AtmospherePushConnection implements PushConnection {
             throws IOException, ClassNotFoundException {
         stream.defaultReadObject();
         state = State.DISCONNECTED;
+        resource = DemoApplication.storedResource;
     }
 
     private static Logger getLogger() {
