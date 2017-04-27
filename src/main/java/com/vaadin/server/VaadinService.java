@@ -1987,7 +1987,7 @@ public abstract class VaadinService implements Serializable {
      * @param wrappedSession
      *            the underlying HTTP session
      */
-    protected void storeSession(VaadinSession session,
+    public void storeSession(VaadinSession session,
             WrappedSession wrappedSession) {
         assert VaadinSession.hasLock(this, wrappedSession);
         writeToHttpSession(wrappedSession, session);
