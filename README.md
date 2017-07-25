@@ -1,5 +1,5 @@
-Failing Vaadin application with spring session redis in Atmosphere LONG_POLLING push mode
+Failing Vaadin application with spring session redis in push mode
 
+
+`docker-compose up -d`
 `./gradlew clean build`
-
-use `-Dsun.io.serialization.extendedDebugInfo=true` during startup
